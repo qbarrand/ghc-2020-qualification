@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 
 	"github.com/qbarrand/ghc-2019-qualification/pkg"
@@ -54,15 +55,67 @@ func main() {
 func process(input, outDir string, logger *log.Logger) {
 	logger.Printf("Starting the goroutine")
 
-	in, err := pkg.ParseInput(input)
+	in, err := pkg.ParseInput(input, logger)
 	if err != nil {
 		msg := fmt.Sprintf("Could not parse %s: %v\n", input, err)
 		panic(msg)
 	}
 
-	_ = in
+	sortedLibraries := make([]*pkg.Library, len(in.Libraries))
 
-	outFilename := filepath.Join(outDir, input)
+	for i, l := range in.Libraries {
+		sortedLibraries[i] = l
+	}
+
+	sort.Slice(sortedLibraries, func(i, j int) bool {
+		return sortedLibraries[i].TotalScore() > sortedLibraries[j].TotalScore()
+	})
+
+	day := 0
+
+	i := 0
+
+	daysToScan := make(map[int]int)
+
+	signedUpLibraries := make([]*pkg.Library, 0)
+
+	//curr := sortedLibraries[i]
+
+	for day < in.DaysForScanning && i < len(sortedLibraries) {
+		curr := sortedLibraries[i]
+
+		if in.DaysForScanning-day >= curr.SignupTime {
+			day += curr.SignupTime
+			i++
+
+			signedUpLibraries = append(signedUpLibraries, curr)
+			daysToScan[curr.ID] = in.DaysForScanning - day
+		} else {
+			break
+		}
+	}
+
+	outFilename := filepath.Join(outDir, filepath.Base(input))
 
 	logger.Print("Writing " + outFilename)
+
+	fd, err := os.Create(outFilename)
+	if err != nil {
+		panic(err)
+	}
+	defer fd.Close()
+
+	fmt.Fprintf(fd, "%d\n", len(signedUpLibraries))
+
+	for _, l := range signedUpLibraries {
+		nBooks := l.GetBooksToBeSent(daysToScan[l.ID])
+
+		fmt.Fprintf(fd, "%d %d\n", l.ID, len(nBooks))
+
+		for _, bookID := range nBooks {
+			fmt.Fprintf(fd, "%d ", bookID)
+		}
+
+		fmt.Fprint(fd, "\n")
+	}
 }
