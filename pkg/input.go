@@ -7,6 +7,8 @@ import (
 	"sort"
 )
 
+const signupTimeWeight = 100
+
 type input struct {
 	Books           []*Book
 	Libraries       []*Library
@@ -16,6 +18,8 @@ type input struct {
 type Book struct {
 	ID    int
 	Score int
+
+	scannned bool
 }
 
 func (b *Book) String() string {
@@ -28,15 +32,21 @@ type Library struct {
 	ID          int
 	SignupTime  int
 
+	selected   bool
 	totalScore int
 }
 
-func (l *Library) GetBooksToBeSent(days int) []int {
+func (l *Library) GetBooksToBeSent(days int) []*Book {
 	// Copy the library's books and sort the copied slice
-	sortedBooks := make([]*Book, len(l.Books))
+	// sortedBooks contains at most len(l.Books), but maybe less as some might have already been scanned
+	sortedBooks := make([]*Book, 0, len(l.Books))
 
-	for i, b := range l.Books {
-		sortedBooks[i] = b
+	for _, b := range l.Books {
+		if b.scannned {
+			continue
+		}
+
+		sortedBooks = append(sortedBooks, b)
 	}
 
 	sort.Slice(sortedBooks, func(i, j int) bool {
@@ -45,21 +55,21 @@ func (l *Library) GetBooksToBeSent(days int) []int {
 
 	booksToScan := days * l.BooksPerDay
 
-	//fmt.Printf("DBG days: %d\n", days)
-	//fmt.Printf("DBG BooksPerDay: %d\n", l.BooksPerDay)
-	//fmt.Printf("DBG booksToScan: %d\n", booksToScan)
-
 	if booksToScan > len(sortedBooks) {
 		booksToScan = len(sortedBooks)
 	}
 
-	ids := make([]int, booksToScan)
+	eligible := make([]*Book, booksToScan)
 
 	for i := 0; i < booksToScan; i++ {
-		ids[i] = sortedBooks[i].ID
+		eligible[i] = sortedBooks[i]
 	}
 
-	return ids
+	return eligible
+}
+
+func (l *Library) MarkAsSelected() {
+	l.selected = true
 }
 
 func (l *Library) String() string {
@@ -73,8 +83,14 @@ func (l *Library) String() string {
 	)
 }
 
-func (l *Library) TotalScore() int {
-	return l.totalScore
+func (l *Library) TotalScore(days int, stdDev float64) float64 {
+	bookScore := 0
+
+	for _, b := range l.GetBooksToBeSent(days) {
+		bookScore += b.Score
+	}
+
+	return float64(bookScore) / (float64(l.SignupTime) * stdDev)
 }
 
 func ParseInput(filename string, logger *log.Logger) (*input, error) {
@@ -146,4 +162,30 @@ func ParseInput(filename string, logger *log.Logger) (*input, error) {
 	logger.Printf("Read %d libraries", len(in.Libraries))
 
 	return &in, nil
+}
+
+func GetBestLibrary(libraries []*Library, days int, stdDev float64) *Library {
+	var (
+		bestLibrary *Library
+		bestScore   float64
+	)
+
+	for _, l := range libraries {
+		if l.selected {
+			continue
+		}
+
+		if score := l.TotalScore(days, stdDev); score > bestScore {
+			bestScore = score
+			bestLibrary = l
+		}
+	}
+
+	return bestLibrary
+}
+
+func MarkBooksAsScanned(books []*Book) {
+	for _, b := range books {
+		b.scannned = true
+	}
 }

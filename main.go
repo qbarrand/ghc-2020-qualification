@@ -6,9 +6,9 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
-	"sort"
 	"sync"
 
 	"github.com/qbarrand/ghc-2019-qualification/pkg"
@@ -61,35 +61,52 @@ func process(input, outDir string, logger *log.Logger) {
 		panic(msg)
 	}
 
-	sortedLibraries := make([]*pkg.Library, len(in.Libraries))
+	ints := make([]int, len(in.Libraries))
 
 	for i, l := range in.Libraries {
-		sortedLibraries[i] = l
+		ints[i] = l.SignupTime
 	}
 
-	sort.Slice(sortedLibraries, func(i, j int) bool {
-		return sortedLibraries[i].TotalScore() > sortedLibraries[j].TotalScore()
-	})
+	std := stdDev(ints)
 
 	day := 0
 
 	i := 0
 
-	daysToScan := make(map[int]int)
+	type signedUpLibrary struct {
+		libID int
+		books []*pkg.Book
+	}
 
-	signedUpLibraries := make([]*pkg.Library, 0)
+	signedUpLibraries := make([]*signedUpLibrary, 0)
 
-	//curr := sortedLibraries[i]
+	for day < in.DaysForScanning {
+		remainingDays := in.DaysForScanning - day
 
-	for day < in.DaysForScanning && i < len(sortedLibraries) {
-		curr := sortedLibraries[i]
+		selected := pkg.GetBestLibrary(in.Libraries, remainingDays, std)
 
-		if in.DaysForScanning-day >= curr.SignupTime {
-			day += curr.SignupTime
+		// Maybe all libraries are selected already?
+		if selected == nil {
+			break
+		}
+
+		selected.MarkAsSelected()
+
+		if in.DaysForScanning-day >= selected.SignupTime {
+			day += selected.SignupTime
 			i++
 
-			signedUpLibraries = append(signedUpLibraries, curr)
-			daysToScan[curr.ID] = in.DaysForScanning - day
+			sul := &signedUpLibrary{
+				libID: selected.ID,
+				books: selected.GetBooksToBeSent(remainingDays),
+			}
+
+			pkg.MarkBooksAsScanned(sul.books)
+
+			if len(sul.books) > 0 {
+				// Only mention libraries from which we'll scan books in the output
+				signedUpLibraries = append(signedUpLibraries, sul)
+			}
 		} else {
 			break
 		}
@@ -107,15 +124,34 @@ func process(input, outDir string, logger *log.Logger) {
 
 	fmt.Fprintf(fd, "%d\n", len(signedUpLibraries))
 
-	for _, l := range signedUpLibraries {
-		nBooks := l.GetBooksToBeSent(daysToScan[l.ID])
+	for _, sul := range signedUpLibraries {
+		fmt.Fprintf(fd, "%d %d\n", sul.libID, len(sul.books))
 
-		fmt.Fprintf(fd, "%d %d\n", l.ID, len(nBooks))
-
-		for _, bookID := range nBooks {
-			fmt.Fprintf(fd, "%d ", bookID)
+		for _, book := range sul.books {
+			fmt.Fprintf(fd, "%d ", book.ID)
 		}
 
 		fmt.Fprint(fd, "\n")
 	}
+}
+
+func stdDev(ints []int) float64 {
+	sum := 0
+	n := len(ints)
+
+	for _, i := range ints {
+		sum += i
+	}
+
+	average := float64(sum) / float64(n)
+
+	var top float64 = 0
+
+	for _, i := range ints {
+		top += math.Pow(float64(i)-average, 2)
+	}
+
+	top /= float64(n)
+
+	return math.Sqrt(top)
 }
