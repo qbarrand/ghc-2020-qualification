@@ -7,7 +7,10 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
+
+	"github.com/qbarrand/ghc-2019-qualification/pkg"
 )
 
 func main() {
@@ -35,6 +38,7 @@ func main() {
 		go func(i string) {
 			process(
 				i,
+				*fOutDir,
 				log.New(loggerOut, fmt.Sprintf("%s | ", i), 0),
 			)
 
@@ -47,6 +51,18 @@ func main() {
 	wg.Wait()
 }
 
-func process(input string, logger *log.Logger) {
+func process(input, outDir string, logger *log.Logger) {
 	logger.Printf("Starting the goroutine")
+
+	in, err := pkg.ParseInput(input)
+	if err != nil {
+		msg := fmt.Sprintf("Could not parse %s: %v\n", input, err)
+		panic(msg)
+	}
+
+	_ = in
+
+	outFilename := filepath.Join(outDir, input)
+
+	logger.Print("Writing " + outFilename)
 }
