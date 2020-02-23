@@ -7,8 +7,6 @@ import (
 	"sort"
 )
 
-const signupTimeWeight = 100
-
 type input struct {
 	Books           []*Book
 	Libraries       []*Library

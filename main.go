@@ -69,6 +69,8 @@ func process(input, outDir string, logger *log.Logger) {
 
 	std := stdDev(ints)
 
+	logger.Printf("stddev: %f", std)
+
 	day := 0
 
 	i := 0
